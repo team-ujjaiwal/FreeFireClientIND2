@@ -24,7 +24,7 @@ def create_protobuf(player_id, region):
 def get_jwt_token(region):
     try:
         uid, password = get_credentials(region)
-        jwt_url = f"https://aditya-jwt-v9op.onrender.com/token?uid={uid}&password={password}"
+        jwt_url = f"https://aditya-jwt-v9op.onrender.com/token?uid=3562381559&password=AF18F2EB5A410D815F54B16EAEAC369FC027E96925005A629E90A823996B0240"
         response = requests.get(jwt_url, timeout=5)
         response.raise_for_status()
         return response.json()
