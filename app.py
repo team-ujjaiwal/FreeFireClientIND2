@@ -5,7 +5,7 @@ from flask import Flask, request, jsonify
 import requests
 import random
 import uid_generator_pb2
-import freefire_pb2
+from a_pb2 import CSGetPlayerPersonalShowRes
 from secret import key, iv
 
 app = Flask(__name__)
@@ -39,7 +39,7 @@ def encrypt_aes(hex_data, key, iv):
 def get_credentials(region):
     region = region.upper()
     if region == "IND":
-        return "3942037420", "A0BF31A2E867E1619013C57462DFCF8D08102552EFB060FAE9A1213C3F331F25"
+        return "3942040791", "EDD92B8948F4453F544C9432DFB4996D02B4054379A0EE083D8459737C50800B"
     elif region in ["NA", "BR", "SAC", "US"]:
         return "uid", "password"
     else:
@@ -97,160 +97,47 @@ def main():
     hex_response = response.content.hex()
 
     try:
-        response_data = freefire_pb2.GetPlayerPersonalShowResponse()
-        response_data.ParseFromString(bytes.fromhex(hex_response))
+        users = decode_hex(hex_response)
     except Exception as e:
         return jsonify({"error": f"Failed to parse Protobuf: {str(e)}"}), 500
 
     result = {}
 
-    # Player Info (field1)
-    if response_data.field1:
-        player = response_data.field1
-        player_data = {
-            'user_id': player.user_id,
-            'account_type': player.account_type,
-            'username': player.username,
-            'country': player.country,
-            'level': player.level,
-            'experience': player.experience,
-            'coin_id': player.coin_id,
-            'diamond_id': player.diamond_id,
-            'wins': player.wins,
-            'kill_count': player.kill_count,
-            'rank': player.rank,
-            'character_id': player.character_id,
-            'battle_count': player.battle_count,
-            'headshot_count': player.headshot_count,
-            'last_login': player.last_login,
-            'ranked_points': player.ranked_points,
-            'survival_mastery': player.survival_mastery,
-            'encrypted_data': player.encrypted_data.hex() if player.encrypted_data else None,
-            'pet_id': player.pet_id,
-            'game_version': player.game_version if hasattr(player, 'game_version') else None,
-            'is_online': player.is_online if hasattr(player, 'is_online') else None,
-            'in_match': player.in_match if hasattr(player, 'in_match') else None
-        }
-        
-        # Premium Info
-        if player.HasField("premium"):
-            player_data['premium'] = {
-                'field4': player.premium.field4.hex() if player.premium.field4 else None,
-                'field5': player.premium.field5.hex() if player.premium.field5 else None,
-                'vip_level': player.premium.vip_level
-            }
-        
-        # Settings
-        if player.HasField("settings"):
-            player_data['settings'] = {
-                'control_type': player.settings.control_type,
-                'sensitivity': player.settings.sensitivity
-            }
-        
-        # Items
-        if player.items:
-            player_data['items'] = []
-            for item in player.items:
-                item_data = {
-                    'item_id': item.item_id,
-                    'quantity': item.quantity
-                }
-                if item.HasField("metadata"):
-                    item_data['metadata'] = {
-                        'type': item.metadata.type,
-                        'value1': item.metadata.value1,
-                        'value2': item.metadata.value2,
-                        'value3': item.metadata.value3,
-                        'flag': item.metadata.flag
-                    }
-                player_data['items'].append(item_data)
-        
-        result['player'] = player_data
+    if users.players:
+        result['players'] = []
+        for p in users.players:
+            result['players'].append({
+                'user_id': p.user_id,
+                'username': p.username,
+                'level': p.level,
+                'rank': p.rank,
+                'last_login': p.last_login,
+                'country_code': p.country_code,
+                'avatar': p.avatar,
+                'banner': p.banner,
+                'clan_tag': p.clan_tag.tag_display if p.HasField("clan_tag") else None,
+                'premium_level': p.premium.premium_level if p.HasField("premium") else None,
+                'game_version': p.game_version,
+                'is_online': p.is_online,
+                'in_match': p.in_match
+            })
 
-    # Inventory Data (field2)
-    if response_data.field2:
-        inventory = response_data.field2
-        inventory_data = {
-            'item_id': inventory.item_id,
-            'quantity': inventory.quantity,
-            'encrypted_data': inventory.encrypted_data.hex() if inventory.encrypted_data else None,
-            'inventory_type': inventory.inventory_type,
-            'default_tab': inventory.default_tab,
-            'timestamp': inventory.timestamp
-        }
-        
-        # Inventory Entries
-        if inventory.entries:
-            inventory_data['entries'] = [{
-                'item_type': entry.item_type,
-                'count': entry.count
-            } for entry in inventory.entries]
-        
-        result['inventory'] = inventory_data
-
-    # Social Data (field6)
-    if response_data.field6:
-        social = response_data.field6
-        result['social'] = {
-            'social_id': social.social_id,
-            'social_url': social.social_url,
-            'associated_id': social.associated_id,
-            'status': social.status,
-            'privacy_level': social.privacy_level,
-            'social_type': social.social_type
+    if users.HasField("clan"):
+        result["clan"] = {
+            "clan_name": users.clan.clan_name,
+            "clan_level": users.clan.clan_level,
+            "clan_xp": users.clan.clan_xp,
+            "clan_xp_required": users.clan.clan_xp_required
         }
 
-    # Player Info (field7) - Additional player data
-    if response_data.field7:
-        player2 = response_data.field7
-        result['player_additional'] = {
-            'user_id': player2.user_id,
-            'username': player2.username,
-            'level': player2.level,
-            'rank': player2.rank,
-            'last_login': player2.last_login
-        }
-
-    # System Info (field8)
-    if response_data.field8:
-        system = response_data.field8
-        result['system'] = {
-            'os_type': system.os_type,
-            'device_model': system.device_model,
-            'platform': system.platform,
-            'ram': system.ram,
-            'storage': system.storage,
-            'network_type': system.network_type
-        }
-
-    # Title Data (field9)
-    if response_data.field9:
-        title = response_data.field9
-        result['title'] = {
-            'title_id': title.title_id,
-            'title_text': title.title_text,
-            'unlock_status': title.unlock_status
-        }
-
-    # Currency (field10)
-    if response_data.field10:
-        currency = response_data.field10
-        result['currency'] = {
-            'currency_type': currency.currency_type,
-            'amount': currency.amount,
-            'bonus': currency.bonus,
-            'expiration': currency.expiration
-        }
-
-    # Season Info (field11)
-    if response_data.field11:
-        season = response_data.field11
-        result['season'] = {
-            'season_number': season.season_number,
-            'current_tier': season.current_tier,
-            'max_tier': season.max_tier,
-            'season_end': season.season_end,
-            'rewards_claimed': season.rewards_claimed
+    if users.HasField("inventory"):
+        result["inventory"] = {
+            "inventory_id": users.inventory.inventory_id,
+            "capacity": users.inventory.capacity,
+            "version": users.inventory.version,
+            "is_equipped": users.inventory.is_equipped,
+            "last_update": users.inventory.last_update,
+            "item_count": len(users.inventory.items)
         }
 
     result['credit'] = '@Ujjaiwal'
